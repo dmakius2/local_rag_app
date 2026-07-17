@@ -7,6 +7,7 @@ concrete providers, so any of them can be swapped without changes here.
 from __future__ import annotations
 
 import logging
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List
@@ -25,12 +26,34 @@ class EmptyDocumentDirectoryError(Exception):
     """Raised when no PDFs are found and no existing index can be loaded."""
 
 
+class IndexNotReadyError(RuntimeError):
+    """Raised when an operation needs an index but none is loaded."""
+
+
 @dataclass(frozen=True)
 class Answer:
     """The result of answering a question: the LLM's text plus its sources."""
 
     text: str
     sources: List[ChunkMetadata]
+
+
+@dataclass(frozen=True)
+class IndexStats:
+    """Stats describing the outcome of a full index rebuild."""
+
+    documents_processed: int
+    chunks_created: int
+    elapsed_seconds: float
+
+
+@dataclass(frozen=True)
+class DocumentInfo:
+    """Summary of a single document's presence in the index."""
+
+    filename: str
+    page_count: int
+    chunk_count: int
 
 
 class PromptBuilder:
@@ -127,16 +150,76 @@ class RAGPipeline:
         """Retrieve relevant context and generate an answer from the LLM."""
         logger.info("Runnign RAGPipeline.answer()")
         if self.vector_store is None:
-            raise RuntimeError("RAGPipeline.initialize() must be called before answer()")
+            raise IndexNotReadyError(
+                "No index is loaded. Add PDFs to the documents directory and rebuild the index first."
+            )
 
         retriever = Retriever(self.embedding_service, self.vector_store, top_k=self.config.top_k)
+        retrieval_start = time.monotonic()
         results = retriever.retrieve(question)
+        retrieval_elapsed = time.monotonic() - retrieval_start
+        logger.info("Retrieved %d chunk(s) in %.3fs", len(results), retrieval_elapsed)
 
         if not results:
             return Answer(text="I don't know. No relevant context was found in the indexed documents.", sources=[])
 
         prompt = self.prompt_builder.build(results, question)
 
+        generation_start = time.monotonic()
         text = self.llm_service.generate(prompt)
+        generation_elapsed = time.monotonic() - generation_start
+        logger.info("LLM generated response in %.3fs", generation_elapsed)
+
         sources = [r.metadata for r in results]
         return Answer(text=text, sources=sources)
+
+    def rebuild_index(self) -> IndexStats:
+        """Force a full rebuild of the index from the documents directory."""
+        logger.info("Running RAGPipeline.rebuild_index()")
+        start = time.monotonic()
+        self.vector_store = self._build_index()
+        elapsed = time.monotonic() - start
+
+        metadata = self.vector_store.all_metadata()
+        documents_processed = len({m.filename for m in metadata})
+        chunks_created = len(metadata)
+        logger.info(
+            "Index rebuilt: %d document(s), %d chunk(s) in %.2fs",
+            documents_processed,
+            chunks_created,
+            elapsed,
+        )
+        return IndexStats(
+            documents_processed=documents_processed,
+            chunks_created=chunks_created,
+            elapsed_seconds=elapsed,
+        )
+
+    def list_documents(self) -> List[DocumentInfo]:
+        """Return a summary of every document currently represented in the index."""
+        logger.info("Running RAGPipeline.list_documents()")
+        if self.vector_store is None:
+            raise IndexNotReadyError("No index is loaded. Rebuild the index first.")
+
+        pages_by_file: dict[str, set[int]] = {}
+        chunks_by_file: dict[str, int] = {}
+        for m in self.vector_store.all_metadata():
+            pages_by_file.setdefault(m.filename, set()).add(m.page_number)
+            chunks_by_file[m.filename] = chunks_by_file.get(m.filename, 0) + 1
+
+        return [
+            DocumentInfo(filename=f, page_count=len(pages_by_file[f]), chunk_count=chunks_by_file[f])
+            for f in sorted(pages_by_file)
+        ]
+
+    def delete_index(self) -> bool:
+        """Delete the persisted index from disk. Returns True if one existed."""
+        logger.info("Running RAGPipeline.delete_index()")
+        existed = VectorStore.exists(self.config.faiss_index_path, self.config.metadata_path)
+        if existed:
+            self.config.faiss_index_path.unlink(missing_ok=True)
+            self.config.metadata_path.unlink(missing_ok=True)
+            logger.info("Deleted index at %s and %s", self.config.faiss_index_path, self.config.metadata_path)
+        self.vector_store = None
+        return existed
+exit

@@ -49,6 +49,10 @@ class VectorStore:
     def __len__(self) -> int:
         return len(self._metadata)
 
+    def all_metadata(self) -> List[ChunkMetadata]:
+        """Return metadata for every chunk currently stored."""
+        return list(self._metadata)
+
     def add(self, embeddings: np.ndarray, metadata: List[ChunkMetadata]) -> None:
         """Add a batch of embeddings and their corresponding metadata."""
         logger.info("Running VectorStore.add()")

@@ -60,7 +60,7 @@ class RecursiveCharacterChunker:
         return self._merge_with_overlap(raw_chunks)
 
     def _split_recursive(self, text: str, separators: List[str]) -> List[str]:
-        logger.inf("running RecursiveCharacterChunker._split_recursive()")
+        logger.info("running RecursiveCharacterChunker._split_recursive()")
         if len(text) <= self.chunk_size:
             return [text] if text else []
 

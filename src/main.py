@@ -10,9 +10,9 @@ if __name__ == "__main__" and __package__ is None:
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.config import Config, configure_logging
-from src.embeddings import EmbeddingService
-from src.llm import LLMConnectionError, LLMError, LLMModelNotFoundError, OllamaLLMService
-from src.rag import EmptyDocumentDirectoryError, RAGPipeline
+from src.llm import LLMConnectionError, LLMError, LLMModelNotFoundError
+from src.rag import EmptyDocumentDirectoryError
+from src.services.rag_service import RAGService
 
 logger = logging.getLogger(__name__)
 
@@ -42,17 +42,6 @@ def print_answer(answer_text: str, sources) -> None:
     print()
 
  
-def build_pipeline(config: Config) -> RAGPipeline:
-    logger.info("RUNNING build_pipeline FUNCTION")
-    embedding_service = EmbeddingService(model_name=config.embedding_model)
-    llm_service = OllamaLLMService(
-        model=config.ollama_model,
-        base_url=config.ollama_base_url,
-        timeout=config.ollama_timeout,
-    )
-    return RAGPipeline(config=config, embedding_service=embedding_service, llm_service=llm_service)
-
-
 def run() -> int:
     config = Config.load()
     configure_logging(config.log_level)
@@ -61,8 +50,8 @@ def run() -> int:
     logger.info("Starting Local RAG application")
 
     try:
-        pipeline = build_pipeline(config)
-        pipeline.initialize()
+        service = RAGService(config)
+        service.initialize()
     except EmptyDocumentDirectoryError as exc:
         print(f"\nError: {exc}\n")
         return 1
@@ -87,7 +76,7 @@ def run() -> int:
             return 0
 
         try:
-            answer = pipeline.answer(question)
+            answer = service.chat(question)
             print_answer(answer.text, answer.sources)
         except LLMModelNotFoundError as exc:
             print(f"\nError: {exc}\n")

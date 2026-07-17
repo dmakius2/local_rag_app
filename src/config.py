@@ -71,6 +71,10 @@ class Config:
     # Logging
     log_level: str = "INFO"
 
+    # API server
+    api_host: str = "0.0.0.0"
+    api_port: int = 8000
+
     @property
     def faiss_index_path(self) -> Path:
         return self.vectorstore_dir / "index.faiss"
@@ -93,6 +97,8 @@ class Config:
             ollama_base_url=_env_str("OLLAMA_BASE_URL", "http://localhost:11434"),
             ollama_timeout=_env_int("OLLAMA_TIMEOUT", 120),
             log_level=_env_str("LOG_LEVEL", "INFO"),
+            api_host=_env_str("API_HOST", "0.0.0.0"),
+            api_port=_env_int("API_PORT", 8000),
         )
     print("Runnign Config.load()")
 
