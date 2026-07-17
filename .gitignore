@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Environment variables
+.env
+
+# Vector store artifacts (regenerable from /documents)
+vectorstore/*.faiss
+vectorstore/*.json
+
+# Documents (user-provided; keep the folder, not necessarily the contents)
+documents/*.pdf
+
+# OS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
