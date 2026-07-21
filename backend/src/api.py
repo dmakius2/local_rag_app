@@ -12,6 +12,7 @@ import time
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from src.config import Config, configure_logging
@@ -48,8 +49,20 @@ app = FastAPI(
         "HTTP interface over a fully local Retrieval-Augmented Generation engine. "
         "The same RAGService instance backs this API and the CLI (src/main.py)."
     ),
-    version="0.2.0",
+    version="0.2.1",
     lifespan=lifespan,
+)
+
+
+# Allows the React frontend (served from a different origin/port in dev,
+# e.g. http://localhost:5173) to call this API from the browser. Everything
+# here runs on localhost with no auth/cookies, so an open policy is fine;
+# tighten this once the API is exposed beyond localhost or gains auth.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 

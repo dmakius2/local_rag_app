@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field, field_validator
 
 class HealthResponse(BaseModel):
     """Service liveness status."""
-
+    print("BACKEND: HealthResponse()")
     status: str = Field(description="Service health status", examples=["healthy"])
 
 
@@ -38,6 +38,7 @@ class SourceModel(BaseModel):
 
     document: str = Field(description="Source PDF filename")
     page: int = Field(description="1-indexed page number within the source document")
+    chunk_text: str = Field(description="Retrieved chunk text this answer was grounded in")
 
 
 class ChatResponse(BaseModel):

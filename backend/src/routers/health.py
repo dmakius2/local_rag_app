@@ -15,4 +15,5 @@ router = APIRouter(tags=["health"])
     description="Returns whether the API process is up and able to serve requests.",
 )
 async def get_health() -> HealthResponse:
+    print("BACKEND: sending request to /health")
     return HealthResponse(status="healthy")

@@ -14,11 +14,11 @@ env/
 .env
 
 # Vector store artifacts (regenerable from /documents)
-vectorstore/*.faiss
-vectorstore/*.json
+backend/vectorstore/*.faiss
+backend/vectorstore/*.json
 
 # Documents (user-provided; keep the folder, not necessarily the contents)
-documents/*.pdf
+backend/documents/*.pdf
 
 # OS
 .DS_Store

@@ -26,5 +26,7 @@ router = APIRouter(tags=["chat"])
 async def chat(request: ChatRequest, service: RAGService = Depends(get_rag_service)) -> ChatResponse:
     logger.info("Received chat request (question length=%d)", len(request.question))
     answer = service.chat(request.question)
-    sources = [SourceModel(document=s.filename, page=s.page_number) for s in answer.sources]
+    sources = [
+        SourceModel(document=s.filename, page=s.page_number, chunk_text=s.chunk_text) for s in answer.sources
+    ]
     return ChatResponse(answer=answer.text, sources=sources)

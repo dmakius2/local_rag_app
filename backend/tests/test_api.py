@@ -70,7 +70,7 @@ def test_chat_returns_answer_and_sources(client):
     assert response.status_code == 200
     body = response.json()
     assert body["answer"] == "Kubernetes is a container orchestration platform."
-    assert body["sources"] == [{"document": "k8s.pdf", "page": 5}]
+    assert body["sources"] == [{"document": "k8s.pdf", "page": 5, "chunk_text": "some context"}]
 
 
 def test_chat_rejects_blank_question(client):

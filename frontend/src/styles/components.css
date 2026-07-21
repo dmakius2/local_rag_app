@@ -1,0 +1,130 @@
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  padding: 7px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  transition: background 0.12s ease, border-color 0.12s ease, opacity 0.12s ease;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background: var(--color-accent);
+  color: #fff;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--color-accent-hover);
+}
+
+.btn-secondary {
+  background: var(--color-bg);
+  border-color: var(--color-border-strong);
+  color: var(--color-text);
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: var(--color-bg-subtle);
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--color-text-muted);
+}
+
+.btn-ghost:hover:not(:disabled) {
+  background: var(--color-bg-subtle);
+}
+
+.btn-danger {
+  background: var(--color-danger);
+  color: #fff;
+}
+
+.spinner {
+  display: inline-block;
+  border-radius: 50%;
+  border: 2px solid rgba(0, 0, 0, 0.12);
+  border-top-color: var(--color-accent);
+  animation: spin 0.7s linear infinite;
+}
+
+.spinner-sm {
+  width: 12px;
+  height: 12px;
+}
+
+.spinner-md {
+  width: 18px;
+  height: 18px;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 24px;
+  font-size: 13px;
+  line-height: 1.4;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.banner-message {
+  flex: 1;
+}
+
+.banner-dismiss {
+  background: none;
+  border: none;
+  font-size: 16px;
+  line-height: 1;
+  color: inherit;
+  opacity: 0.6;
+  padding: 0 2px;
+}
+
+.banner-dismiss:hover {
+  opacity: 1;
+}
+
+.banner-error {
+  background: var(--color-danger-subtle);
+  color: var(--color-danger);
+}
+
+.banner-warning {
+  background: var(--color-warning-subtle);
+  color: var(--color-warning);
+}
+
+.banner-success {
+  background: var(--color-success-subtle);
+  color: var(--color-success);
+}
+
+.banner-info {
+  background: var(--color-bg-subtle);
+  color: var(--color-text-muted);
+}
+
+/* Index status panel banners are inline, not full-width app banners. */
+.index-status-panel .banner {
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  border-bottom: 1px solid transparent;
+  padding: 8px 10px;
+  font-size: 12px;
+}
