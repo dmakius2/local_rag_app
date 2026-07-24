@@ -9,6 +9,12 @@ export function IndexStatusPanel() {
     <div className="index-status-panel">
       <ReindexButton />
 
+      {phase === "indexing" && (
+        <p className="sidebar-hint">
+          Re-embedding every document from scratch — this can take a few minutes for large document sets.
+        </p>
+      )}
+
       {phase === "success" && lastResult && (
         <Banner tone="success" onDismiss={dismiss}>
           Indexed {lastResult.documentsProcessed} document

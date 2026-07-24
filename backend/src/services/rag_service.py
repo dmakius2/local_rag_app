@@ -55,3 +55,10 @@ class RAGService:
     def delete_index(self) -> bool:
         """Delete the persisted index. Returns True if one existed."""
         return self.pipeline.delete_index()
+
+    def delete_document(self, filename: str) -> bool:
+        """Remove a document from the index and delete its source file.
+
+        Returns True if the document existed (in the index and/or on disk).
+        """
+        return self.pipeline.delete_document(filename)

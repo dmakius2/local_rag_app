@@ -18,9 +18,10 @@ interface ChatState {
 export const useChatStore = create<ChatState>((set, get) => ({
   messages: [],
   isSending: false,
-  error: null,
+  error: null, 
 
   sendMessage: async (question: string) => {
+    console.log("Context: chatStore.ts => sendMessage() is running.");
     const trimmed = question.trim();
     if (!trimmed || get().isSending) return;
 

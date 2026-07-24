@@ -1,8 +1,8 @@
 # Local RAG
 
 A fully local Retrieval Augmented Generation (RAG) application. Ask questions
-about your own PDF documents and get answers grounded in their content —
-no cloud AI services, no API keys, no data leaving your machine.
+about your own documents (PDF, DOCX, TXT) and get answers grounded in their
+content — no cloud AI services, no API keys, no data leaving your machine.
 
 Usable three ways: as an interactive CLI, as a FastAPI REST service, or
 through a React web UI — the CLI and API both run through the exact same
@@ -17,8 +17,17 @@ Browser → React (frontend/) → FastAPI (backend/src/api.py) → RAG Engine �
 
 - **Local by default** — embeddings run via Sentence Transformers, generation
   runs via [Ollama](https://ollama.com); nothing is sent to a third-party API.
-- **PDF ingestion** — recursively reads every PDF in `documents/`, extracting
-  text page by page with PyMuPDF.
+- **Multi-format ingestion** — recursively reads every supported file in
+  `documents/`, extracting text with PyMuPDF (PDF), python-docx (DOCX), or a
+  plain read (TXT). Legacy `.doc` files are stored but not text-extracted (see
+  [Supported document types](#supported-document-types)).
+- **Drag-and-drop uploads** — drop files onto the sidebar (or click to browse)
+  and they're saved straight into `documents/` via the API; no manual file
+  copying required.
+- **Instant document removal** — delete a document from the sidebar and its
+  vectors are removed from the FAISS index in place (via `remove_ids`) and
+  its source file is deleted from `documents/` — no re-embedding of the rest
+  of the corpus, so it's near-instant even for large document sets.
 - **Persistent vector index** — chunks are embedded and stored in a FAISS
   index under `vectorstore/`, with metadata (filename, page, chunk id, text)
   kept alongside it. The index is built once and reused on subsequent runs.
@@ -37,8 +46,21 @@ Browser → React (frontend/) → FastAPI (backend/src/api.py) → RAG Engine �
   path and no duplicated business logic.
 - **ChatGPT-style web UI** — a React + TypeScript frontend (`frontend/`)
   consumes the REST API: conversation-style chat with markdown rendering,
-  expandable per-source retrieved-chunk previews, a document/index sidebar,
-  and a reindex button with progress feedback.
+  expandable per-source retrieved-chunk previews, a document/index sidebar
+  with drag-and-drop upload and per-document delete, and a reindex button
+  with progress feedback.
+
+## Supported document types
+
+| Extension | Text extracted into the index? | Notes |
+|-----------|--------------------------------|-------|
+| `.pdf`    | Yes                             | Extracted page-by-page with PyMuPDF |
+| `.docx`   | Yes                             | Extracted as a single "page" with python-docx |
+| `.txt`    | Yes                             | Read as plain UTF-8 text |
+| `.doc`    | No                              | Saved to `documents/` but not parsed — there's no reliable pure-Python parser for the legacy binary Word format. Convert to `.docx` or PDF to make it searchable. |
+
+Both the upload endpoint and the drag-and-drop UI accept all four extensions;
+only the first three are picked up when the index is rebuilt.
 
 ## Architecture
 
@@ -71,8 +93,8 @@ Sentence Transformers   Ollama HTTP API
       FAISS
    (vector_store.py)
         │
-     PDF Documents
-   (pdf_loader.py, chunker.py)
+     Documents (PDF/DOCX/TXT/DOC)
+   (document_loader.py, chunker.py)
 ```
 
 `RAGService` is the single orchestration seam: it owns pipeline construction
@@ -84,10 +106,10 @@ Each component communicates through a small, explicit interface:
 
 | Component          | File                        | Responsibility                                       |
 |---------------------|-----------------------------|--------------------------------------------------------|
-| PDF Loader          | `pdf_loader.py`             | Discover PDFs, extract text per page                  |
+| Document Loader     | `document_loader.py`        | Discover PDF/DOCX/TXT/DOC files, extract text (skips `.doc`) |
 | Chunker             | `chunker.py`                | Split page text into overlapping chunks               |
 | Embedding Service   | `embeddings.py`             | Turn text into vectors (Sentence Transformers)        |
-| Vector Store        | `vector_store.py`           | Persist/search embeddings + metadata (FAISS)          |
+| Vector Store        | `vector_store.py`           | Persist/search/remove embeddings + metadata (FAISS)   |
 | Retriever           | `rag.py`                    | Embed a query, fetch top-k similar chunks             |
 | Prompt Builder      | `rag.py`                    | Assemble the grounded prompt template                  |
 | LLM Service         | `llm.py`                    | Generate an answer from a prompt (Ollama today)       |
@@ -157,7 +179,9 @@ or directories. All settings have sensible defaults, so this step is optional.
 
 ## Running the CLI
 
-1. Add one or more PDF files to the `backend/documents/` directory.
+1. Add one or more PDF, DOCX, or TXT files to the `backend/documents/`
+   directory (`.doc` files can live there too but won't be searchable — see
+   [Supported document types](#supported-document-types)).
 2. Launch the interactive shell (from inside `backend/`):
 
    ```bash
@@ -181,7 +205,7 @@ or directories. All settings have sensible defaults, so this step is optional.
 
 5. Type `exit` (or `quit`, or Ctrl+D) to leave the shell.
 
-To force a rebuild of the index (e.g. after adding new PDFs), delete the
+To force a rebuild of the index (e.g. after adding new documents), delete the
 contents of `vectorstore/` and run the app again, or use `POST /index` on
 the API (see below) — either entrypoint calls the same rebuild logic.
 
@@ -230,6 +254,8 @@ keep in sync.
 | POST   | `/index`     | Rebuild the FAISS index from `documents/`                 |
 | DELETE | `/index`     | Delete the persisted index                                 |
 | GET    | `/documents` | List documents currently represented in the index         |
+| POST   | `/documents` | Upload one or more files (PDF/DOC/DOCX/TXT) into `documents/` |
+| DELETE | `/documents/{filename}` | Remove a document's vectors from the index and delete its source file |
 
 ### curl examples
 
@@ -242,11 +268,20 @@ curl -X POST http://localhost:8000/chat \
   -H "Content-Type: application/json" \
   -d '{"question": "What is Kubernetes?"}'
 
-# Rebuild the index after adding new PDFs to documents/
+# Rebuild the index after adding new documents to documents/
 curl -X POST http://localhost:8000/index
 
 # List indexed documents
 curl http://localhost:8000/documents
+
+# Upload one or more files into documents/ (does not auto-reindex)
+curl -X POST http://localhost:8000/documents \
+  -F "files=@report.pdf" \
+  -F "files=@notes.txt"
+
+# Remove a document: deletes its vectors immediately (no reindex needed)
+# and deletes the source file from documents/
+curl -X DELETE http://localhost:8000/documents/notes.txt
 
 # Delete the index
 curl -X DELETE http://localhost:8000/index
@@ -272,6 +307,36 @@ Example `/index` response:
   "elapsed_seconds": 4.12
 }
 ```
+
+Example `POST /documents` (upload) response:
+
+```json
+{
+  "uploaded": [
+    { "filename": "report.pdf", "size_bytes": 10235187, "extractable": true },
+    { "filename": "notes.txt", "size_bytes": 64, "extractable": true }
+  ]
+}
+```
+
+`extractable` is `false` only for `.doc` uploads — it tells the caller
+whether the file's text will actually show up after the next `POST /index`.
+Uploading does not trigger a reindex by itself; call `POST /index`
+afterwards (the web UI's "Reindex documents" button does this for you).
+
+Example `DELETE /documents/{filename}` response:
+
+```json
+{
+  "deleted": true,
+  "filename": "notes.txt"
+}
+```
+
+Unlike upload, deletion takes effect immediately — the document's vectors
+are removed from the FAISS index in place and the index is re-saved to disk
+as part of the same request, so no follow-up `POST /index` is needed. A
+filename that doesn't exist (in the index or on disk) returns `404`.
 
 ## Running the React frontend
 
@@ -338,6 +403,18 @@ the rest of this project uses) rather than React Context, since several
 stores (chat, documents, index, health) are read from unrelated parts of the
 tree and Zustand avoids provider nesting/re-render fan-out for that.
 
+The Documents sidebar section includes a drag-and-drop upload zone
+(`components/documents/DocumentDropzone.tsx`) — dropping files (or clicking
+to browse) posts them to `POST /documents`, then surfaces a success/error
+banner. It does not auto-reindex; use the "Reindex documents" button
+afterwards to make new files searchable.
+
+Each row in the document list (`components/documents/DocumentListItem.tsx`)
+has a delete button that asks for confirmation, calls
+`DELETE /documents/{filename}`, and removes the row immediately on success —
+unlike upload, no reindex step is needed since deletion updates the FAISS
+index in place.
+
 **Top K** is the only settings control wired to real behavior today: the
 backend's retrieval count is fixed via the server-side `TOP_K` env var (see
 Configuration reference below), so the frontend applies the user's Top K as
@@ -383,12 +460,12 @@ local-rag/
 ├── backend/
 │   ├── requirements.txt
 │   ├── .env.example
-│   ├── documents/              # Drop your PDFs here
+│   ├── documents/              # Drop your PDF/DOCX/TXT/DOC files here
 │   ├── vectorstore/             # FAISS index + metadata (generated)
 │   ├── src/
 │   │   ├── __init__.py
 │   │   ├── config.py             # Central configuration
-│   │   ├── pdf_loader.py         # PDF discovery + text extraction
+│   │   ├── document_loader.py    # PDF/DOCX/TXT discovery + text extraction
 │   │   ├── chunker.py            # Recursive character chunking
 │   │   ├── embeddings.py         # Sentence Transformers embedding service
 │   │   ├── vector_store.py       # FAISS index + metadata persistence
@@ -404,16 +481,20 @@ local-rag/
 │   │       ├── health.py          # GET /health
 │   │       ├── chat.py            # POST /chat
 │   │       ├── index.py           # POST /index, DELETE /index
-│   │       └── documents.py       # GET /documents
+│   │       └── documents.py       # GET/POST /documents, DELETE /documents/{filename}
 │   └── tests/
 │       ├── test_config.py
 │       ├── test_chunker.py
-│       ├── test_pdf_loader.py
+│       ├── test_document_loader.py
 │       ├── test_vector_store.py
 │       └── test_api.py
 └── frontend/                  # React + TypeScript web UI (see below)
     ├── src/
     │   ├── components/
+    │   │   └── documents/
+    │   │       ├── DocumentDropzone.tsx   # Drag-and-drop / click-to-browse upload
+    │   │       ├── DocumentList.tsx
+    │   │       └── DocumentListItem.tsx   # Per-document row + delete button
     │   ├── pages/
     │   ├── context/           # Zustand stores
     │   ├── hooks/
@@ -431,10 +512,14 @@ cd backend
 pytest
 ```
 
-`tests/test_api.py` covers the HTTP layer (health, chat, index) using
-FastAPI's `TestClient` with a fake `RAGService` injected via dependency
-override, so it doesn't require a running Ollama server or a downloaded
-embedding model.
+`tests/test_api.py` covers the HTTP layer (health, chat, index, document
+upload/delete — including path-traversal rejection) using FastAPI's
+`TestClient` with a fake `RAGService` and a temp-directory `Config` injected
+via dependency override, so it doesn't require a running Ollama server or a
+downloaded embedding model. `tests/test_document_loader.py` covers
+PDF/DOCX/TXT extraction and confirms `.doc` files are discovered but skipped
+without raising. `tests/test_vector_store.py` covers `remove_by_filename`,
+including that removing one document's chunks leaves the rest searchable.
 
 ## Configuration reference
 
@@ -449,7 +534,7 @@ All settings can be set via environment variables or `.env`:
 | `TOP_K`            | `5`                  | Number of chunks retrieved per question   |
 | `CHUNK_SIZE`       | `500`                | Max characters per chunk                  |
 | `CHUNK_OVERLAP`    | `100`                | Overlap between consecutive chunks        |
-| `DOCUMENTS_DIR`    | `documents`          | Where to read PDFs from                   |
+| `DOCUMENTS_DIR`    | `documents`          | Where to read/upload documents from       |
 | `VECTORSTORE_DIR`  | `vectorstore`        | Where the FAISS index + metadata live     |
 | `LOG_LEVEL`        | `INFO`               | Python logging level                      |
 | `API_HOST`         | `0.0.0.0`            | Host the FastAPI server binds to          |
@@ -470,7 +555,11 @@ API translates the same errors into HTTP status codes:
 | Empty/missing `documents/` directory (indexing) | Prints error, exits     | 400 |
 | No index loaded yet (`/chat`, `/documents`)     | N/A (CLI always builds on startup) | 400 |
 | `DELETE /index` with no index present           | N/A                      | 400 (CLI) / 404 (API) |
-| Invalid or unreadable PDFs                       | Skipped, ingestion continues | Skipped, ingestion continues |
+| Invalid or unreadable PDF/DOCX/TXT               | Skipped, ingestion continues | Skipped, ingestion continues |
+| Legacy `.doc` file present                       | Skipped (not extracted), ingestion continues | Skipped (not extracted), ingestion continues |
+| Upload: unsupported extension, empty file, or >50MB | N/A                   | 400 |
+| `DELETE /documents/{filename}` with no such document | N/A                 | 404 |
+| `DELETE /documents/{filename}` with invalid filename (`.`, `..`) | N/A     | 400 |
 | Malformed/missing request fields                 | N/A                      | 422 |
 | Unexpected internal error                        | Prints generic message, no traceback | 500, no traceback |
 
@@ -492,17 +581,23 @@ addition to component-level logs, the RAG layer and API log:
 ## Future roadmap
 
 Version 0.2 added a FastAPI REST layer on top of the same RAG engine.
-Version 0.3 adds the React frontend (`frontend/`). Planned next — the
-frontend was deliberately structured (typed API layer, Zustand stores,
-React Router already wired) so these land as additions, not rewrites:
+Version 0.3 added the React frontend (`frontend/`). Most recently: ingestion
+was extended to DOCX/TXT (alongside PDF), and the sidebar gained
+drag-and-drop file uploads plus instant, in-place document removal. Planned
+next — the frontend was deliberately structured (typed API layer, Zustand
+stores, React Router already wired) so these land as additions, not
+rewrites:
 
 - **Streaming responses** — extend `LLMService.generate` with a streaming
   variant, surfaced through the CLI/API as tokens arrive, and consumed in
   the frontend via incremental message updates instead of one round trip.
 - **Multiple conversations** — conversation list + `/chat/:conversationId`
   routes (React Router is already in place for this).
-- **File uploads** — upload PDFs directly from the sidebar instead of
-  dropping them into `documents/` by hand.
+- **Auto-reindex on upload** — optionally trigger `POST /index` right after
+  a successful upload instead of requiring a separate manual reindex click.
+- **Legacy `.doc` extraction** — shell out to a converter (e.g. LibreOffice
+  headless or `antiword`) so `.doc` uploads become searchable without the
+  user manually converting to `.docx`/PDF first.
 - **Dark mode** — the frontend's CSS custom properties (`src/styles/`) are
   already centralized for a `prefers-color-scheme` / toggle-driven theme.
 - **Per-request Top K / temperature / model** — extend `ChatRequest` so the
@@ -512,7 +607,7 @@ React Router already wired) so these land as additions, not rewrites:
   login/profile UI.
 - **Docker** — containerize the API, frontend, and an Ollama sidecar.
 - **Amazon S3** — swap the document source behind a new loader implementing
-  the same interface as `PDFLoader`.
+  the same interface as `DocumentLoader`.
 - **PostgreSQL / pgvector** — implement an alternative to `VectorStore` with
   the same interface for teams needing a shared, scalable vector DB.
 - **Background indexing workers** — move `RAGPipeline.rebuild_index` into an

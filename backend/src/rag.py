@@ -14,16 +14,16 @@ from typing import List
 
 from src.chunker import RecursiveCharacterChunker, build_chunks
 from src.config import Config
+from src.document_loader import DocumentLoader
 from src.embeddings import EmbeddingService
 from src.llm import LLMService
-from src.pdf_loader import PDFLoader
 from src.vector_store import ChunkMetadata, SearchResult, VectorStore
 
 logger = logging.getLogger(__name__)
 
 
 class EmptyDocumentDirectoryError(Exception):
-    """Raised when no PDFs are found and no existing index can be loaded."""
+    """Raised when no readable documents are found and no existing index can be loaded."""
 
 
 class IndexNotReadyError(RuntimeError):
@@ -115,7 +115,7 @@ class RAGPipeline:
 
     def _build_index(self) -> VectorStore:
         logger.info("Runnign RAGPipeline._build_index()")
-        loader = PDFLoader(self.config.documents_dir)
+        loader = DocumentLoader(self.config.documents_dir)
         chunker = RecursiveCharacterChunker(
             chunk_size=self.config.chunk_size,
             chunk_overlap=self.config.chunk_overlap,
@@ -124,8 +124,8 @@ class RAGPipeline:
         pages = list(loader.load_all())
         if not pages:
             raise EmptyDocumentDirectoryError(
-                f"No readable PDF content found in '{self.config.documents_dir}'. "
-                "Add PDF files to that directory and try again."
+                f"No readable document content found in '{self.config.documents_dir}'. "
+                "Add PDF, DOCX, or TXT files to that directory and try again."
             )
 
         all_chunks = []
@@ -211,6 +211,34 @@ class RAGPipeline:
             DocumentInfo(filename=f, page_count=len(pages_by_file[f]), chunk_count=chunks_by_file[f])
             for f in sorted(pages_by_file)
         ]
+
+    def delete_document(self, filename: str) -> bool:
+        """Remove a document's vectors from the index and delete its source file.
+
+        Vectors are removed in place (no re-embedding of the remaining
+        documents needed) and the updated index is persisted immediately.
+        Returns True if the document was found in the index and/or on disk,
+        False if neither was found.
+        """
+        logger.info("Running RAGPipeline.delete_document(%s)", filename)
+        safe_filename = Path(filename).name
+
+        removed_count = 0
+        if self.vector_store is not None:
+            removed_count = self.vector_store.remove_by_filename(safe_filename)
+            if removed_count:
+                self.vector_store.save(self.config.faiss_index_path, self.config.metadata_path)
+
+        file_path = self.config.documents_dir / safe_filename
+        file_existed = file_path.exists()
+        if file_existed:
+            file_path.unlink()
+
+        found = removed_count > 0 or file_existed
+        logger.info(
+            "delete_document('%s'): removed %d vector(s), file_existed=%s", safe_filename, removed_count, file_existed
+        )
+        return found
 
     def delete_index(self) -> bool:
         """Delete the persisted index from disk. Returns True if one existed."""

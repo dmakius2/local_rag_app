@@ -65,6 +65,26 @@ class VectorStore:
         self._metadata.extend(metadata)
         logger.info("Added %d vector(s) to index (total=%d)", embeddings.shape[0], len(self._metadata))
 
+    def remove_by_filename(self, filename: str) -> int:
+        """Remove every chunk belonging to `filename`. Returns the count removed.
+
+        FAISS's IndexFlat `remove_ids` operates on vector position, and
+        compacts the remaining vectors while preserving their relative
+        order — so filtering `_metadata` with the same predicate keeps both
+        structures in lockstep without needing to re-embed anything.
+        """
+        logger.info("Running VectorStore.remove_by_filename(%s)", filename)
+        positions = [i for i, m in enumerate(self._metadata) if m.filename == filename]
+        if not positions:
+            return 0
+
+        selector = faiss.IDSelectorBatch(np.array(positions, dtype="int64"))
+        removed = self._index.remove_ids(selector)
+        self._metadata = [m for m in self._metadata if m.filename != filename]
+
+        logger.info("Removed %d vector(s) for '%s' (total=%d)", removed, filename, len(self._metadata))
+        return int(removed)
+
     def search(self, query_embedding: np.ndarray, top_k: int) -> List[SearchResult]:
         """Return the top_k most similar chunks to the query embedding."""
         logger.info("Running VectorStore.search()")

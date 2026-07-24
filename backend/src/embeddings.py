@@ -51,9 +51,6 @@ class EmbeddingService:
             normalize_embeddings=True,
         )
 
-        for e in embeddings:
-            print(e)
-
         return embeddings.astype(np.float32)
 
     def embed_query(self, query: str) -> np.ndarray:

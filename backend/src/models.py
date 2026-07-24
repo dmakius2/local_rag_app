@@ -76,6 +76,31 @@ class DeleteIndexResponse(BaseModel):
     deleted: bool = Field(description="Whether an existing index was found and deleted")
 
 
+class DeleteDocumentResponse(BaseModel):
+    """Result of deleting a single document."""
+
+    deleted: bool = Field(description="Whether the document was found and deleted")
+    filename: str = Field(description="Filename that was deleted")
+
+
+class UploadedDocumentModel(BaseModel):
+    """Summary of a single document saved to the documents directory."""
+
+    filename: str = Field(description="Filename the document was saved as")
+    size_bytes: int = Field(description="Size of the uploaded file in bytes")
+    extractable: bool = Field(
+        description="Whether this file type's text is extracted when the index is rebuilt"
+    )
+
+
+class UploadDocumentsResponse(BaseModel):
+    """Result of uploading one or more documents."""
+
+    uploaded: List[UploadedDocumentModel] = Field(
+        default_factory=list, description="Documents successfully saved to the documents directory"
+    )
+
+
 class ErrorResponse(BaseModel):
     """Standard error payload. Never contains stack traces."""
 

@@ -3,10 +3,12 @@ import { ApiError, type ErrorResponsePayload } from "@/types";
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
 
+// No default Content-Type header: axios sets `application/json` automatically
+// for plain-object payloads, and leaving it unset for FormData payloads lets
+// the browser generate the multipart boundary itself (required for uploads).
 export const apiClient = axios.create({
   baseURL: BASE_URL,
   timeout: 60_000,
-  headers: { "Content-Type": "application/json" },
 });
 
 /** Every request/response error is normalized to an ApiError so components
@@ -15,9 +17,11 @@ apiClient.interceptors.response.use(
   (response) => response,
   (error: AxiosError<ErrorResponsePayload>) => {
     if (error.code === "ECONNABORTED") {
-      return Promise.reject(
-        new ApiError("The request took too long to respond. The model may still be generating — try again.", "timeout")
-      );
+      const isIndexRequest = error.config?.url?.includes("/index");
+      const message = isIndexRequest
+        ? "Reindexing is taking longer than expected. Large document sets can take several minutes on CPU — check the backend logs; it may still be running in the background."
+        : "The request took too long to respond. The model may still be generating — try again.";
+      return Promise.reject(new ApiError(message, "timeout"));
     }
 
     if (!error.response) {

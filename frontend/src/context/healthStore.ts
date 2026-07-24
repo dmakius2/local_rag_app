@@ -15,7 +15,6 @@ export const useHealthStore = create<HealthState>((set) => ({
 
   check: async () => {
     try {
-      console.log("CONTEXT: useHealthStore() Runing");
       const healthy = await checkHealth();
       set({ status: healthy ? "online" : "offline", lastCheckedAt: Date.now() });
     } catch {

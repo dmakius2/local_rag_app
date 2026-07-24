@@ -7,6 +7,8 @@ export interface ChatResult {
 }
 
 export async function askQuestion(question: string): Promise<ChatResult> {
+  console.log("Services: chatService.ts => askQuestion() is running.");
+
   const { data } = await apiClient.post<ChatResponsePayload>("/chat", { question });
   return {
     answer: data.answer,
